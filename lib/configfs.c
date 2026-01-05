@@ -24,7 +24,6 @@
 
 #include "configfs.h"
 #include "tools.h"
-#include "uvc-formats.h"
 
 /* -----------------------------------------------------------------------------
  * Path handling and support
@@ -241,6 +240,33 @@ static char *udc_find_video_device(const char *udc, const char *function)
 
 	return video;
 }
+
+/* ------------------------------------------------------------------------
+ * GUIDs and formats
+ */
+
+#define UVC_GUID_FORMAT_MJPEG \
+	{ 'M',  'J',  'P',  'G', 0x00, 0x00, 0x10, 0x00, \
+	 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}
+#define UVC_GUID_FORMAT_YUY2 \
+	{ 'Y',  'U',  'Y',  '2', 0x00, 0x00, 0x10, 0x00, \
+	 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}
+
+struct uvc_function_format_info {
+	uint8_t guid[16];
+	uint32_t fcc;
+};
+
+static struct uvc_function_format_info uvc_formats[] = {
+	{
+		.guid		= UVC_GUID_FORMAT_YUY2,
+		.fcc		= V4L2_PIX_FMT_YUYV,
+	},
+	{
+		.guid		= UVC_GUID_FORMAT_MJPEG,
+		.fcc		= V4L2_PIX_FMT_MJPEG,
+	},
+};
 
 /* -----------------------------------------------------------------------------
  * Legacy g_webcam support
@@ -660,7 +686,7 @@ static int configfs_parse_streaming_format(const char *path,
 	}
 
 	format->num_frames = n_entries;
-	format->frames = calloc(format->num_frames, sizeof *format->frames);
+	format->frames = calloc(sizeof *format->frames, format->num_frames);
 	if (!format->frames)
 		return -ENOMEM;
 
@@ -744,7 +770,7 @@ static int configfs_parse_streaming_header(const char *path,
 	}
 
 	cfg->num_formats = n_entries;
-	cfg->formats = calloc(cfg->num_formats, sizeof *cfg->formats);
+	cfg->formats = calloc(sizeof *cfg->formats, cfg->num_formats);
 	if (!cfg->formats)
 		return -ENOMEM;
 

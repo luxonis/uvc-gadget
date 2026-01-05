@@ -22,6 +22,7 @@ https://mesonbuild.com/Cross-compilation.html for detailed guidance on using
 meson.
 
 In brief summary:
+
 ```
 $ meson build --cross <meson cross file>
 $ ninja -C build

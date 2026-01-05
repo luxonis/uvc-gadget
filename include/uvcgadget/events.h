@@ -22,7 +22,7 @@
 
 struct events {
 	struct list_entry events;
-	volatile bool done;
+	bool done;
 
 	int maxfd;
 	fd_set rfds;
