@@ -1,10 +1,10 @@
-/* SPDX-License-Identifier: LGPL-2.1-or-later */
+/* SPDX-License-Identifier: MIT */
 /*
- * JPEG still image video source
+ * Luxonis image video source
  *
- * Copyright (C) 2018 Paul Elder
+ * Copyright (c) 2026 Luxonis, Inc.
  *
- * Contact: Paul Elder <paul.elder@ideasonboard.com>
+ * Contact: <support@luxonis.com>
  */
 
 #include <sys/types.h>
