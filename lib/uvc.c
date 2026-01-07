@@ -39,6 +39,9 @@ struct uvc_device
 	unsigned int fcc;
 	unsigned int width;
 	unsigned int height;
+
+	/* Custom optional callback for events handling*/
+	void (*uvc_events_cb)(uint32_t arg);
 };
 
 static const char *uvc_request_names[] = {
@@ -355,6 +358,15 @@ uvc_events_process_data(struct uvc_device *dev,
 	}
 }
 
+void uvc_events_register_cb(struct uvc_stream *stream, void (*cb)(uint32_t arg))
+{
+	if (stream == NULL) {
+		printf("uvc_events_register_cb: error: uvc_stream pointer is NULL\n");
+		return;
+	}
+	stream->uvc->uvc_events_cb = cb;
+}
+
 static void uvc_events_process(void *d)
 {
 	struct uvc_device *dev = d;
@@ -367,7 +379,11 @@ static void uvc_events_process(void *d)
 	if (ret < 0) {
 		printf("VIDIOC_DQEVENT failed: %s (%d)\n", strerror(errno),
 			errno);
-		return;
+		/* Serious error, gracefully exit.
+		*  Usually happens when UDC controller is unbound (eg. on `adb root` command).
+		*/
+		uvc_stream_enable(dev->stream, 0);
+		exit(EXIT_FAILURE);
 	}
 
 	memset(&resp, 0, sizeof resp);
@@ -375,7 +391,13 @@ static void uvc_events_process(void *d)
 
 	switch (v4l2_event.type) {
 	case UVC_EVENT_CONNECT:
+		return;
 	case UVC_EVENT_DISCONNECT:
+		printf("UVC_EVENT_DISCONNECT\n");
+		/* Call custom event callback */
+		if (dev->uvc_events_cb)
+			dev->uvc_events_cb(0);
+		uvc_stream_enable(dev->stream, 0);
 		return;
 
 	case UVC_EVENT_SETUP:
@@ -387,10 +409,16 @@ static void uvc_events_process(void *d)
 		return;
 
 	case UVC_EVENT_STREAMON:
+		/* Call custom event callback */
+		if (dev->uvc_events_cb)
+			dev->uvc_events_cb(1);
 		uvc_stream_enable(dev->stream, 1);
 		return;
 
 	case UVC_EVENT_STREAMOFF:
+		/* Call custom event callback */
+		if (dev->uvc_events_cb)
+			dev->uvc_events_cb(0);
 		uvc_stream_enable(dev->stream, 0);
 		return;
 	}
@@ -416,6 +444,10 @@ void uvc_events_init(struct uvc_device *dev, struct events *events)
 	uvc_fill_streaming_control(dev, &dev->commit, 1, 1, 0);
 
 	memset(&sub, 0, sizeof sub);
+	sub.type = UVC_EVENT_CONNECT;
+	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+	sub.type = UVC_EVENT_DISCONNECT;
+	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	sub.type = UVC_EVENT_SETUP;
 	ioctl(dev->vdev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 	sub.type = UVC_EVENT_DATA;
