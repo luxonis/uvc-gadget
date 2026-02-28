@@ -46,7 +46,8 @@ static int depthai_source_set_format(struct video_source *s __attribute__((unuse
 				  struct v4l2_pix_format *fmt)
 {
 	if (fmt->pixelformat != v4l2_fourcc('M', 'J', 'P', 'G') &&
-	    fmt->pixelformat != v4l2_fourcc('Y', 'U', 'Y', 'V')) {
+	    fmt->pixelformat != v4l2_fourcc('Y', 'U', 'Y', 'V') &&
+	    fmt->pixelformat != v4l2_fourcc('N', 'V', '1', '2')) {
 		printf("depthai-source: unsupported fourcc: 0x%08x\n", fmt->pixelformat);
 		return -EINVAL;
 	}
