@@ -37,7 +37,6 @@ static void depthai_source_destroy(struct video_source *s)
 	if (src->imgdata)
 		free(src->imgdata);
 
-	timer_destroy(src->timer);
 
 	free(src);
 }
@@ -57,7 +56,6 @@ static int depthai_source_set_frame_rate(struct video_source *s, unsigned int fp
 {
 	struct depthai_source *src = to_depthai_source(s);
 
-	timer_set_fps(src->timer, fps);
 
 	return 0;
 }
@@ -70,11 +68,6 @@ static int depthai_source_free_buffers(struct video_source *s __attribute__((unu
 static int depthai_source_stream_on(struct video_source *s)
 {
 	struct depthai_source *src = to_depthai_source(s);
-	int ret;
-
-	ret = timer_arm(src->timer);
-	if (ret)
-		return ret;
 
 	src->streaming = true;
 	return 0;
@@ -89,14 +82,13 @@ static int depthai_source_stream_off(struct video_source *s)
 	 * No error check here, because we want to flag that streaming is over
 	 * even if the timer is still running due to the failure.
 	 */
-	ret = timer_disarm(src->timer);
 	src->streaming = false;
 
 	return ret;
 }
 
 static void depthai_source_fill_buffer(struct video_source *s,
-				   struct video_buffer *buf)
+				   struct video_buffer *buf, bool still)
 {
 	struct depthai_source *src = to_depthai_source(s);
 	
@@ -106,8 +98,8 @@ static void depthai_source_fill_buffer(struct video_source *s,
 		fprintf(stderr, "depthai_source_fill_buffer: No buffer getter registered\n");
 		return;
 	}
-	
-	s_get_buffer_cb(s, buf);
+
+	s_get_buffer_cb(s, buf, still);
 }
 
 
@@ -141,8 +133,6 @@ struct video_source *depthai_video_source_create()
 	memset(src, 0, sizeof *src);
 	src->src.ops = &depthai_source_ops;
 	src->src.type = VIDEO_SOURCE_STATIC;
-
-	src->timer = timer_new();
 
 	return &src->src;
 }

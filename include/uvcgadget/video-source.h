@@ -9,6 +9,8 @@
 #ifndef __VIDEO_SOURCE_H__
 #define __VIDEO_SOURCE_H__
 
+#include <stdbool.h>
+
 struct v4l2_buffer;
 struct v4l2_pix_format;
 struct video_buffer;
@@ -28,7 +30,7 @@ struct video_source_ops {
 	int(*stream_on)(struct video_source *src);
 	int(*stream_off)(struct video_source *src);
 	int(*queue_buffer)(struct video_source *src, struct video_buffer *buf);
-	void(*fill_buffer)(struct video_source *src, struct video_buffer *buf);
+	void(*fill_buffer)(struct video_source *src, struct video_buffer *buf, bool still);
 };
 
 typedef void(*video_source_buffer_handler_t)(void *, struct video_source *,
@@ -73,6 +75,6 @@ int video_source_stream_off(struct video_source *src);
 int video_source_queue_buffer(struct video_source *src,
 			      struct video_buffer *buf);
 void video_source_fill_buffer(struct video_source *src,
-			      struct video_buffer *buf);
+			      struct video_buffer *buf, bool still);
 
 #endif /* __VIDEO_SOURCE_H__ */

@@ -53,14 +53,22 @@ static void uvc_stream_uvc_process_no_buf(void *d)
 	struct v4l2_device *sink = uvc_v4l2_device(stream->uvc);
 	struct video_buffer buf;
 	int ret;
+	bool still_trigger = stream->still_trigger;
 
 	ret = v4l2_dequeue_buffer(sink, &buf);
 	if (ret < 0)
 		return;
 
-	video_source_fill_buffer(stream->src, &buf);
+	if (still_trigger) {
+		uvc_stream_set_still_image_next(stream, 0);
+		uvc_stream_set_still_image_next(stream, 1);
+		stream->still_trigger = false;
+	}
+
+	video_source_fill_buffer(stream->src, &buf, still_trigger);
 
 	v4l2_queue_buffer(sink, &buf);
+
 }
 
 
@@ -148,7 +156,7 @@ static int uvc_stream_start_no_alloc(struct uvc_stream *stream)
 			.mem = sink->buffers.buffers[i].mem,
 		};
 
-		video_source_fill_buffer(stream->src, &buf);
+		video_source_fill_buffer(stream->src, &buf, false);
 		ret = v4l2_queue_buffer(sink, &buf);
 		if (ret < 0)
 			return ret;
@@ -288,6 +296,14 @@ int uvc_stream_set_frame_rate(struct uvc_stream *stream, unsigned int fps)
 {
 	printf("=== Setting frame rate to %u fps\n", fps);
 	return video_source_set_frame_rate(stream->src, fps);
+}
+
+int uvc_stream_set_still_image_next(struct uvc_stream *stream, int enable)
+{
+	if (stream == NULL || stream->uvc == NULL)
+		return -EINVAL;
+
+	return uvc_set_still_image_next(stream->uvc, enable);
 }
 
 /* ---------------------------------------------------------------------------

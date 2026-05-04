@@ -104,7 +104,7 @@ static int jpg_source_stream_off(struct video_source *s)
 }
 
 static void jpg_source_fill_buffer(struct video_source *s,
-				   struct video_buffer *buf)
+				   struct video_buffer *buf, bool still)
 {
 	struct jpg_source *src = to_jpg_source(s);
 	unsigned int size;

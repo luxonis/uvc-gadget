@@ -73,7 +73,7 @@ int video_source_queue_buffer(struct video_source *src,
 }
 
 void video_source_fill_buffer(struct video_source *src,
-			      struct video_buffer *buf)
+			      struct video_buffer *buf, bool still)
 {
-	src->ops->fill_buffer(src, buf);
+	src->ops->fill_buffer(src, buf, still);
 }

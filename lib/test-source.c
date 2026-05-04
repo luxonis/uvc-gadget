@@ -81,7 +81,7 @@ static int test_source_stream_off(struct video_source *s __attribute__((unused))
 }
 
 static void test_source_fill_buffer(struct video_source *s,
-				    struct video_buffer *buf)
+				    struct video_buffer *buf, bool still)
 {
 	struct test_source *src = to_test_source(s);
 	unsigned int bpl;
