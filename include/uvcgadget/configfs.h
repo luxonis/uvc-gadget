@@ -35,9 +35,15 @@ struct uvc_function_config_interface {
 /*
  * struct uvc_function_config_control - Control interface parameters
  * @intf: Generic interface parameters
+ * @camera_terminal_id: Camera terminal entity ID from ConfigFS
+ * @processing_unit_id: Processing unit entity ID from ConfigFS
+ * @extension_unit_id: First extension unit entity ID from ConfigFS, or 0
  */
 struct uvc_function_config_control {
 	struct uvc_function_config_interface intf;
+	unsigned int camera_terminal_id;
+	unsigned int processing_unit_id;
+	unsigned int extension_unit_id;
 };
 
 /*

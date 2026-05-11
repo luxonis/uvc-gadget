@@ -540,12 +540,55 @@ static int configfs_parse_interface(const char *path,
 	return ret;
 }
 
+static int configfs_parse_entity_id_terminal(const char *path,
+					     unsigned int *entity_id)
+{
+	return attribute_read_uint(path, "bTerminalID", entity_id);
+}
+
+static int configfs_parse_entity_id_unit(const char *path,
+					 unsigned int *entity_id)
+{
+	return attribute_read_uint(path, "bUnitID", entity_id);
+}
+
+static int entity_filter(const struct dirent *ent)
+{
+	if (ent->d_type != DT_DIR)
+		return 0;
+	if (!strcmp(ent->d_name, "."))
+		return 0;
+	if (!strcmp(ent->d_name, ".."))
+		return 0;
+	return 1;
+}
+
 static int configfs_parse_control(const char *path,
 				  struct uvc_function_config_control *cfg)
 {
+	char *extensions;
+	char *extension;
 	int ret;
 
 	ret = configfs_parse_interface(path, &cfg->intf);
+	ret = ret ? : configfs_parse_child(path, "terminal/camera/default",
+					   &cfg->camera_terminal_id,
+					   configfs_parse_entity_id_terminal);
+	ret = ret ? : configfs_parse_child(path, "processing/default",
+					   &cfg->processing_unit_id,
+					   configfs_parse_entity_id_unit);
+
+	extensions = path_join(path, "extensions");
+	if (!extensions)
+		return ret ? : -ENOMEM;
+
+	extension = dir_first_match(extensions, entity_filter);
+	free(extensions);
+	if (extension) {
+		ret = ret ? : configfs_parse_entity_id_unit(extension,
+							    &cfg->extension_unit_id);
+		free(extension);
+	}
 
 	return ret;
 }

@@ -18,42 +18,12 @@
 #include <sys/ioctl.h>
 
 #include "configfs.h"
+#include "control.h"
 #include "events.h"
 #include "stream.h"
 #include "tools.h"
 #include "uvc.h"
 #include "v4l2.h"
-
-struct uvc_still_streaming_control {
-	uint8_t  bFormatIndex;
-	uint8_t  bFrameIndex;
-	uint8_t  bCompressionIndex;
-	uint32_t dwMaxVideoFrameSize;
-	uint32_t dwMaxPayloadTransferSize;
-} __attribute__((packed));
-
-struct uvc_device
-{
-	struct v4l2_device *vdev;
-
-	struct uvc_stream *stream;
-	struct uvc_function_config *fc;
-
-	struct uvc_streaming_control probe;
-	struct uvc_streaming_control commit;
-
-	struct uvc_still_streaming_control still_probe;
-	struct uvc_still_streaming_control still_commit;
-
-	int control;
-
-	unsigned int fcc;
-	unsigned int width;
-	unsigned int height;
-
-	/* Custom optional callback for events handling*/
-	void (*uvc_events_cb)(uint32_t arg);
-};
 
 static const char *uvc_request_names[] = {
 	[UVC_RC_UNDEFINED] = "UNDEFINED",
@@ -75,36 +45,6 @@ static const char *uvc_request_name(uint8_t req)
         return "UNKNOWN";
 }
 
-static const char *uvc_pu_control_names[] = {
-	[UVC_PU_CONTROL_UNDEFINED] = "UNDEFINED",
-	[UVC_PU_BACKLIGHT_COMPENSATION_CONTROL] = "BACKLIGHT_COMPENSATION",
-	[UVC_PU_BRIGHTNESS_CONTROL] = "BRIGHTNESS",
-	[UVC_PU_CONTRAST_CONTROL] = "CONTRAST",
-	[UVC_PU_GAIN_CONTROL] = "GAIN",
-	[UVC_PU_POWER_LINE_FREQUENCY_CONTROL] = "POWER_LINE_FREQUENCY",
-	[UVC_PU_HUE_CONTROL] = "HUE",
-	[UVC_PU_SATURATION_CONTROL] = "SATURATION",
-	[UVC_PU_SHARPNESS_CONTROL] = "SHARPNESS",
-	[UVC_PU_GAMMA_CONTROL] = "GAMMA",
-	[UVC_PU_WHITE_BALANCE_TEMPERATURE_CONTROL] = "WHITE_BALANCE_TEMPERATURE",
-	[UVC_PU_WHITE_BALANCE_TEMPERATURE_AUTO_CONTROL] = "WHITE_BALANCE_TEMPERATURE_AUTO",
-	[UVC_PU_WHITE_BALANCE_COMPONENT_CONTROL] = "WHITE_BALANCE_COMPONENT",
-	[UVC_PU_WHITE_BALANCE_COMPONENT_AUTO_CONTROL] = "WHITE_BALANCE_COMPONENT_AUTO",
-	[UVC_PU_DIGITAL_MULTIPLIER_CONTROL] = "DIGITAL_MULTIPLIER",
-	[UVC_PU_DIGITAL_MULTIPLIER_LIMIT_CONTROL] = "DIGITAL_MULTIPLIER_LIMIT",
-	[UVC_PU_HUE_AUTO_CONTROL] = "HUE_AUTO",
-	[UVC_PU_ANALOG_VIDEO_STANDARD_CONTROL] = "ANALOG_VIDEO_STANDARD",
-	[UVC_PU_ANALOG_LOCK_STATUS_CONTROL] = "ANALOG_LOCK_STATUS",
-};
-
-static const char *pu_control_name(uint8_t cs)
-{
-    if (cs < ARRAY_SIZE(uvc_pu_control_names))
-        return uvc_pu_control_names[cs];
-    else
-        return "UNKNOWN";
-}
-
 struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
 {
 	struct uvc_device *dev;
@@ -115,6 +55,7 @@ struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
 
 	memset(dev, 0, sizeof *dev);
 	dev->stream = stream;
+	list_init(&dev->controls);
 
 	dev->vdev = v4l2_open(devname);
 	if (dev->vdev == NULL) {
@@ -127,6 +68,8 @@ struct uvc_device *uvc_open(const char *devname, struct uvc_stream *stream)
 
 void uvc_close(struct uvc_device *dev)
 {
+	uvc_controls_cleanup(dev);
+
 	v4l2_close(dev->vdev);
 	dev->vdev = NULL;
 
@@ -229,14 +172,24 @@ uvc_events_process_standard(struct uvc_device *dev,
 }
 
 static void
-uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs, uint8_t len,
+uvc_events_process_control(struct uvc_device *dev,
+			   const struct usb_ctrlrequest *ctrl,
 			   struct uvc_request_data *resp)
 {
-	printf("control request (req %s cs %s)\n", uvc_request_name(req), pu_control_name(cs));
-	(void)dev;
+	uint8_t entity_id = ctrl->wIndex >> 8;
+	uint8_t selector = ctrl->wValue >> 8;
+	int ret;
 
-	resp->data[0] = 0x03;
-	resp->length = len;
+	printf("control request (req %s entity %u cs 0x%02x)\n",
+	       uvc_request_name(ctrl->bRequest), entity_id, selector);
+
+	ret = uvc_control_process_setup(dev, ctrl->bRequest, entity_id,
+					selector, ctrl->wLength, resp);
+	if (ret < 0) {
+		printf("unsupported control request (req %s entity %u cs 0x%02x): %s (%d)\n",
+		       uvc_request_name(ctrl->bRequest), entity_id, selector,
+		       strerror(-ret), -ret);
+	}
 }
 
 static void
@@ -296,7 +249,6 @@ static void
 uvc_events_process_vs_still(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			     struct uvc_request_data *resp)
 {
-	struct uvc_streaming_control *ctrl;
 	struct uvc_still_streaming_control *still;
 
 	printf("still streaming request (req %s cs %02x), length %d\n", uvc_request_name(req), cs, resp->length);
@@ -429,7 +381,7 @@ uvc_events_process_class(struct uvc_device *dev,
 		return;
 
 	if (interface == dev->fc->control.intf.bInterfaceNumber)
-		uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, ctrl->wLength, resp);
+		uvc_events_process_control(dev, ctrl, resp);
 	else if (interface == dev->fc->streaming.intf.bInterfaceNumber)
 		uvc_events_process_streaming(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
 }
@@ -440,6 +392,9 @@ uvc_events_process_setup(struct uvc_device *dev,
 			 struct uvc_request_data *resp)
 {
 	dev->control = 0;
+	dev->pending_control.control = NULL;
+	dev->pending_control.request = 0;
+	dev->pending_control.length = 0;
 
 	printf("bRequestType %02x bRequest %02x wValue %04x wIndex %04x "
 		"wLength %04x\n", ctrl->bRequestType, ctrl->bRequest,
@@ -468,7 +423,11 @@ uvc_events_process_data(struct uvc_device *dev,
 	const struct uvc_still_streaming_control *still =
 		(const struct uvc_still_streaming_control *)&data->data;
 	struct uvc_streaming_control *target;
-	int ret;
+
+	if (dev->pending_control.control != NULL) {
+		uvc_control_process_data(dev, data);
+		return;
+	}
 
 	switch (dev->control) {
 	case UVC_VS_PROBE_CONTROL:
