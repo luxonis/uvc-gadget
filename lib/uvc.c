@@ -24,6 +24,14 @@
 #include "uvc.h"
 #include "v4l2.h"
 
+struct uvc_still_streaming_control {
+	uint8_t  bFormatIndex;
+	uint8_t  bFrameIndex;
+	uint8_t  bCompressionIndex;
+	uint32_t dwMaxVideoFrameSize;
+	uint32_t dwMaxPayloadTransferSize;
+} __attribute__((packed));
+
 struct uvc_device
 {
 	struct v4l2_device *vdev;
@@ -33,6 +41,9 @@ struct uvc_device
 
 	struct uvc_streaming_control probe;
 	struct uvc_streaming_control commit;
+
+	struct uvc_still_streaming_control still_probe;
+	struct uvc_still_streaming_control still_commit;
 
 	int control;
 
@@ -183,6 +194,30 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 }
 
 static void
+uvc_fill_still_streaming_control(struct uvc_device *dev,
+				 struct uvc_still_streaming_control *ctrl,
+				 int iformat, int iframe)
+{
+	const struct uvc_function_config_format *format;
+	const struct uvc_function_config_frame *frame;
+
+	iformat = clamp((unsigned int)iformat, 1U,
+			dev->fc->streaming.num_formats);
+	format = &dev->fc->streaming.formats[iformat - 1];
+
+	iframe = clamp((unsigned int)iframe, 1U, format->num_frames);
+	frame = &format->frames[iframe - 1];
+
+	memset(ctrl, 0, sizeof(*ctrl));
+	ctrl->bFormatIndex = iformat;
+	ctrl->bFrameIndex = iframe;
+	ctrl->bCompressionIndex = 0;
+	ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
+	ctrl->dwMaxPayloadTransferSize = dev->fc->streaming.ep.wMaxPacketSize;
+}
+
+
+static void
 uvc_events_process_standard(struct uvc_device *dev,
 			    const struct usb_ctrlrequest *ctrl,
 			    struct uvc_request_data *resp)
@@ -200,16 +235,12 @@ uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs, uint
 	printf("control request (req %s cs %s)\n", uvc_request_name(req), pu_control_name(cs));
 	(void)dev;
 
-	/*
-	 * Responding to controls is not currently implemented. As an interim
-	 * measure respond to say that both get and set operations are permitted.
-	 */
 	resp->data[0] = 0x03;
 	resp->length = len;
 }
 
 static void
-uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
+uvc_events_process_vs(struct uvc_device *dev, uint8_t req, uint8_t cs,
 			     struct uvc_request_data *resp)
 {
 	struct uvc_streaming_control *ctrl;
@@ -262,6 +293,132 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
 }
 
 static void
+uvc_events_process_vs_still(struct uvc_device *dev, uint8_t req, uint8_t cs,
+			     struct uvc_request_data *resp)
+{
+	struct uvc_streaming_control *ctrl;
+	struct uvc_still_streaming_control *still;
+
+	printf("still streaming request (req %s cs %02x), length %d\n", uvc_request_name(req), cs, resp->length);
+	
+	still = (struct uvc_still_streaming_control *)&resp->data;
+	resp->length = sizeof(*still);
+
+	printf("still streaming request (req %s cs %02x) for format index %d, frame index %d\n",
+		uvc_request_name(req), cs, still->bFormatIndex, still->bFrameIndex);
+		fflush(stdout);
+	switch (req) {
+	case UVC_SET_CUR:
+		printf("UVC_SET_CUR");
+		dev->control = cs;
+		resp->length = sizeof(*still);
+		break;
+
+	case UVC_GET_CUR:
+		printf("UVC_GET_CUR");
+		if (cs == UVC_VS_STILL_PROBE_CONTROL)
+			memcpy(still, &dev->still_probe, sizeof *still);
+		else
+			memcpy(still, &dev->still_commit, sizeof *still);
+		break;
+
+	case UVC_GET_MIN:
+	case UVC_GET_MAX:
+	case UVC_GET_DEF:
+		uvc_fill_still_streaming_control(dev, still, 1, 1);
+		break;
+
+	case UVC_GET_RES:
+		memset(still, 0, sizeof *still);
+		break;
+
+	case UVC_GET_LEN:
+		resp->data[0] = sizeof(*still) & 0xff;
+		resp->data[1] = sizeof(*still) >> 8;
+		resp->length = 2;
+		break;
+
+	case UVC_GET_INFO:
+		resp->data[0] = 0x03;
+		resp->length = 1;
+		break;
+	}
+	printf("out");
+	fflush(stdout);
+}
+
+static void
+uvc_events_process_trigger_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
+			     struct uvc_request_data *resp)
+{
+	uint8_t *trigger = &resp->data[0];
+
+	printf("trigger control request (req %s cs %02x)\n", uvc_request_name(req), cs);
+
+	switch (req) {
+	case UVC_SET_CUR:
+		dev->control = cs;
+		resp->length = 1;
+		break;
+
+	case UVC_GET_CUR:
+		*trigger = dev->stream->still_trigger;
+		resp->length = 1;
+		break;
+
+	case UVC_GET_MIN:
+		*trigger = 0;
+		resp->length = 1;
+		break;
+	case UVC_GET_MAX:
+		*trigger = 1;
+		resp->length = 1;
+		break;
+
+	case UVC_GET_RES:
+		*trigger = 1;
+		resp->length = 1;
+		break;
+
+	case UVC_GET_LEN:
+		resp->data[0] = 1;
+		resp->data[1] = 0;
+		resp->length = 2;
+		break;
+
+	case UVC_GET_INFO:
+		resp->data[0] = 0x03;
+		resp->length = 1;
+		break;
+	}
+}
+
+
+static void
+uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
+			     struct uvc_request_data *resp)
+{
+
+	printf("streaming request (req %s cs %02x), dev %x\n", uvc_request_name(req), cs, (unsigned int)dev);
+	switch (cs) {
+	case UVC_VS_PROBE_CONTROL:
+	case UVC_VS_COMMIT_CONTROL:
+		uvc_events_process_vs(dev, req, cs, resp);
+		break;
+
+	case UVC_VS_STILL_PROBE_CONTROL:
+	case UVC_VS_STILL_COMMIT_CONTROL:
+		uvc_events_process_vs_still(dev, req, cs, resp);
+		printf("still streaming request processed (req %s cs %02x)\n", uvc_request_name(req), cs);
+		break;
+
+	case UVC_VS_STILL_IMAGE_TRIGGER_CONTROL:
+		uvc_events_process_trigger_control(dev, req, cs, resp);
+		break;
+	}
+}
+
+static void
 uvc_events_process_class(struct uvc_device *dev,
 			 const struct usb_ctrlrequest *ctrl,
 			 struct uvc_request_data *resp)
@@ -308,7 +465,10 @@ uvc_events_process_data(struct uvc_device *dev,
 {
 	const struct uvc_streaming_control *ctrl =
 		(const struct uvc_streaming_control *)&data->data;
+	const struct uvc_still_streaming_control *still =
+		(const struct uvc_still_streaming_control *)&data->data;
 	struct uvc_streaming_control *target;
+	int ret;
 
 	switch (dev->control) {
 	case UVC_VS_PROBE_CONTROL:
@@ -320,14 +480,37 @@ uvc_events_process_data(struct uvc_device *dev,
 		printf("setting commit control, length = %d\n", data->length);
 		target = &dev->commit;
 		break;
+	
+	case UVC_VS_STILL_PROBE_CONTROL:
+		uvc_fill_still_streaming_control(dev, &dev->still_probe,
+						 still->bFormatIndex,
+						 still->bFrameIndex);
+		return;
 
+	case UVC_VS_STILL_COMMIT_CONTROL:
+		uvc_fill_still_streaming_control(dev, &dev->still_commit,
+						 still->bFormatIndex,
+						 still->bFrameIndex);
+		return;
+
+	case UVC_VS_STILL_IMAGE_TRIGGER_CONTROL:
+		if (data->length < 1) {
+			printf("still trigger control payload too short: %d\n", data->length);
+			return;
+		}
+
+		dev->stream->still_trigger = data->data[0];
+			
+		return;
 	default:
 		printf("setting unknown control, length = %d\n", data->length);
 		return;
 	}
 
-	uvc_fill_streaming_control(dev, target, ctrl->bFormatIndex,
-				   ctrl->bFrameIndex, ctrl->dwFrameInterval);
+	if (dev->control == UVC_VS_COMMIT_CONTROL || dev->control == UVC_VS_PROBE_CONTROL) {
+		uvc_fill_streaming_control(dev, target, ctrl->bFormatIndex,
+					ctrl->bFrameIndex, ctrl->dwFrameInterval);
+	}
 
 	if (dev->control == UVC_VS_COMMIT_CONTROL) {
 		const struct uvc_function_config_format *format;
@@ -469,6 +652,14 @@ void uvc_set_config(struct uvc_device *dev, struct uvc_function_config *fc)
 int uvc_set_format(struct uvc_device *dev, struct v4l2_pix_format *format)
 {
 	return v4l2_set_format(dev->vdev, format);
+}
+
+int uvc_set_still_image_next(struct uvc_device *dev, int enable)
+{
+	int32_t value = !!enable;
+
+	return v4l2_set_control(dev->vdev, UVCGADGET_CID_STILL_IMAGE_NEXT,
+				&value);
 }
 
 struct v4l2_device *uvc_v4l2_device(struct uvc_device *dev)

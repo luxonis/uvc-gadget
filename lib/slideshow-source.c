@@ -320,7 +320,7 @@ static int slideshow_source_stream_off(struct video_source *s)
 }
 
 static void slideshow_source_fill_buffer(struct video_source *s,
-					 struct video_buffer *buf)
+					 struct video_buffer *buf, bool still)
 {
 	struct slideshow_source *src = to_slideshow_source(s);
 	unsigned int size;

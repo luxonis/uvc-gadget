@@ -27,6 +27,8 @@ struct uvc_stream
 	struct uvc_device *uvc;
 
 	struct events *events;
+	bool still_trigger;
+	unsigned int post_still_drop_frames;
 };
 
 /*
@@ -115,6 +117,15 @@ int uvc_stream_set_format(struct uvc_stream *stream,
  * Returns 0 on success, or a negative error code on failure.
  */
 int uvc_stream_set_frame_rate(struct uvc_stream *stream, unsigned int fps);
+
+/*
+ * uvc_stream_set_still_image_next - Mark the next queued frame as a still image
+ * @stream: the UVC stream
+ * @enable: non-zero to latch the next frame as still, zero to clear the latch
+ *
+ * Returns 0 on success, or a negative error code on failure.
+ */
+int uvc_stream_set_still_image_next(struct uvc_stream *stream, int enable);
 
 /*
  * uvc_stream_enable - Turn on/off video streaming for the UVC stream

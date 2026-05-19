@@ -26,7 +26,7 @@ struct video_source;
 struct video_source *depthai_video_source_create();
 void depthai_video_source_init(struct video_source *src, struct events *events);
 
-typedef void (*depthai_uvc_get_buffer_cb_t)(struct video_source *src, struct video_buffer *buf);
+typedef void (*depthai_uvc_get_buffer_cb_t)(struct video_source *src, struct video_buffer *buf, bool still);
 
 /* register the application’s buffer‐getter */
 void depthai_uvc_register_get_buffer(depthai_uvc_get_buffer_cb_t cb);

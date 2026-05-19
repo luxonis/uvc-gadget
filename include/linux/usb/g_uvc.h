@@ -22,6 +22,12 @@
 #define UVC_EVENT_DATA			(V4L2_EVENT_PRIVATE_START + 5)
 #define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 5)
 
+/*
+ * Driver-private control that latches "the next queued frame is a still
+ * image". Keep this in sync with the matching kernel driver definition.
+ */
+#define UVCGADGET_CID_STILL_IMAGE_NEXT (V4L2_CID_USER_BASE + 0x1000)
+
 struct uvc_request_data {
 	__s32 length;
 	__u8 data[60];
