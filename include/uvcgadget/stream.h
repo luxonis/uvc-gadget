@@ -10,6 +10,8 @@
 #ifndef __STREAM_H__
 #define __STREAM_H__
 
+#include <stdbool.h>
+
 struct events;
 struct uvc_function_config;
 struct v4l2_pix_format;

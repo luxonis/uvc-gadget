@@ -1,5 +1,6 @@
 # Explicit list of public headers
 set(uvcgadget_public_headers
+    ${CMAKE_SOURCE_DIR}/include/uvcgadget/control.h
     ${CMAKE_SOURCE_DIR}/include/uvcgadget/configfs.h
     ${CMAKE_SOURCE_DIR}/include/uvcgadget/events.h
     ${CMAKE_SOURCE_DIR}/include/uvcgadget/list.h

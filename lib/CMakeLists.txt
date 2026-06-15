@@ -6,6 +6,7 @@
 
 # File: lib/CMakeLists.txt
 add_library(uvcgadget SHARED
+    control.c
     configfs.c
     events.c
     jpg-source.c

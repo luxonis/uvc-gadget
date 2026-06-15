@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 
 libuvcgadget_sources = files([
+  'control.c',
   'configfs.c',
   'events.c',
   'jpg-source.c',

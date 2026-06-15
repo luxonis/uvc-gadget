@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 
 uvcgadget_public_headers = files([
+  'control.h',
   'configfs.h',
   'events.h',
   'libcamera-source.h',
